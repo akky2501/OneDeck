@@ -1,5 +1,5 @@
 # OneDeck
-Game Description Language for Playing Card
+Game Description Language for Playing Cards
 
 このプロジェクトは[株式会社なうデータ研究所](https://www.nau.co.jp/)様のインターン成果です．
 (インターン期間 8/13 - 8/20，9/5)
