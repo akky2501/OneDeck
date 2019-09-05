@@ -1,5 +1,5 @@
 # OneDeck
-Game Navigation Language for Playing Cards
+Game Navigation Language for Playing Cards (WIP)
 
 このプロジェクトは[株式会社なうデータ研究所](https://www.nau.co.jp/)様のインターン成果です．
 (インターン期間 8/13 - 8/23，9/5)
