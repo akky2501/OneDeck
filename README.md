@@ -1,13 +1,17 @@
 # OneDeck
 Game Description Language for Playing Card
 
-このプロジェクトは[株式会社なうデータ研究所](https://www.nau.co.jp/)様のインターン成果です。
+このプロジェクトは[株式会社なうデータ研究所](https://www.nau.co.jp/)様のインターン成果です．
+(インターン期間 8/13 - 8/20，9/5)
 
 ## What
-トランプを用いたカードゲーム、およびプレイヤーの行動選択をナビゲートするための記述言語
+- トランプを用いたカードゲームとプレイヤーの行動選択を記述するための言語
+- ゲーム進行のナビゲーションシステム
+
+詳細はdocument内の資料を参照
 
 ## TODO
 - [x] Lexer / Parser
-- [] Interpreter
-- [] Assumption Generator
-- [] Viewer
+- [ ] Interpreter
+- [ ] Assumption Generator
+- [ ] Viewer

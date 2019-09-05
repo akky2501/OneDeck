@@ -1,0 +1,176 @@
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::str::FromStr;
+use crate::syntax::Toplevel::{self, *};
+use crate::syntax::fulldeck;
+use crate::obj::{self, Card, Object, Role, Choice, ChoiceLabel, Action, PredicateExpr, PredicateAtom};
+use crate::obj::Suit::{self, *};
+
+grammar;
+
+pub Program: Vec<Toplevel> = <(Toplevel)*>;
+
+Toplevel: Toplevel = {
+    <DeclCards> => <>,
+    <DeclActor> => <>,
+    <DeclEntry> => <>,
+    <DeclRole>  => <>,
+}
+
+DeclCards: Toplevel = {
+    "Cards" <n:Name> <i:("初期値" <DeclDeck>)?> => {
+        let c = i.unwrap_or(vec![]);
+        Toplevel::DeclCards(n, Object::Cards(c))
+    }
+}
+
+DeclDeck: Vec<Card> = {
+    "Fulldeck" => fulldeck(),
+    "Fulldeck" "-" "{" <c: Card+> "}" => {
+        let d = c.into_iter().collect::<HashSet<_>>();
+        fulldeck().into_iter().filter(|x| !d.contains(x)).collect()
+    },
+    "{" <c: Card+> "}" => c,
+}
+
+Card: Card = {
+    <s: r"'S([1-9]|10|11|12|13)">  => Card(Spade, s[2..].parse().unwrap()),
+    r"'SA" => Card(Spade, 1),
+    r"'SJ" => Card(Spade, 11),
+    r"'SQ" => Card(Spade, 12),
+    r"'SK" => Card(Spade, 13),
+    
+    <s: r"'H([1-9]|10|11|12|13)">  => Card(Hart, s[2..].parse().unwrap()),
+    r"'HA" => Card(Hart, 1),
+    r"'HJ" => Card(Hart, 11),
+    r"'HQ" => Card(Hart, 12),
+    r"'HK" => Card(Hart, 13),
+    
+    <s: r"'C([1-9]|10|11|12|13)">  => Card(Club, s[2..].parse().unwrap()),
+    r"'CA" => Card(Club, 1),
+    r"'CJ" => Card(Club, 11),
+    r"'CQ" => Card(Club, 12),
+    r"'CK" => Card(Club, 13),
+    
+    <s: r"'D([1-9]|10|11|12|13)">  => Card(Diamond, s[2..].parse().unwrap()),
+    r"'DA" => Card(Diamond, 1),
+    r"'DJ" => Card(Diamond, 11),
+    r"'DQ" => Card(Diamond, 12),
+    r"'DK" => Card(Diamond, 13),
+    
+    <s: r"'JK(1|2)">  => Card(Joker, s[3..].parse().unwrap()),
+}
+
+DeclActor: Toplevel = {
+    "Actor" <name: Name> <role: Name> "(" <param: (<Name> ",")*> <last: Name> ")"=> {
+        let mut param = param;
+        param.push(last);
+        Toplevel::DeclActor(name, role, param)
+    },
+}
+
+DeclEntry: Toplevel = "Entry" <entry: Action>　"。" => Toplevel::DeclEntry(entry);
+
+DeclRole: Toplevel = {
+    "Role" <name: Name> "(" <args: (<Name> ",")*> <last: Name> ")" "{" <ss: Situation+> "}"=> {
+        let mut args = args;
+        args.push(last);
+        let situations = ss.into_iter().collect::<HashMap<_, _>>();
+        Toplevel::DeclRole(name, Role{args, situations})
+    }
+}
+
+Situation: (String, Vec<Choice>) = {
+    <name: Name> "{" <ch: Choice+> "}" => (name, ch)
+}
+
+Choice: Choice = {
+    <when: ("When" <PredicateExpr> "->")?> <must: "Must"?> <label: ChoiceLabel> ":" <actions: Actions> => {
+        // assum_varsは後で解析して埋める
+        Choice {_assum_vars: vec![], when: when.unwrap_or(PredicateExpr::True), _must: must.is_some(), label, actions}
+    }
+}
+
+ChoiceLabel: ChoiceLabel = {
+    <name: Name> <params: ("(" <LabelParams> ")")?> => 
+        ChoiceLabel{ name, params: params.unwrap_or(vec![])}
+}
+
+LabelParams: Vec<PredicateAtom> = {
+    <params: (<PAtom> ",")*> <last: PAtom> => {
+        let mut params = params;
+        params.push(last);
+        params
+    }
+}
+
+Actions: Vec<Action> = {
+    <actions: (<Action> "、")*> <last: Action> "。" => {
+        let mut actions = actions;
+        actions.push(last);
+        actions
+    }
+}
+
+Action: Action = {
+    "何もしない" => Action::Skip,
+    "終了する" => Action::Finish,
+    "[" <d: PAtom> "]をシャッフルする" => Action::Shuffle(d),
+    "[" <d: PAtom> "]を逆順にする" => Action::Reverse(d),
+    "[" <d1: PAtom> "]の[" <c: PAtom> "]を[" <d2: PAtom> "]へ追加する" => Action::AppendACard(d1, c, d2),
+    "[" <d1: PAtom> "]の[" <c1: PAtom> "]と[" <d2: PAtom> "]の[" <c2: PAtom> "]を交換する" => Action::ExchangeACard(d1, c1, d2, c2),
+    "[" <d1: PAtom> "]から[" <n: PAtom> "]枚を[" <d2: PAtom> "]へ追加する" => Action::AppendNCards(d1, n, d2),
+    "[" <d1: PAtom> "]を[" <d2: PAtom> "]へ移動する" => Action::MoveCards(d1, d2),
+    "[" <d1: PAtom> "]と[" <d2: PAtom> "]を交換する" => Action::ExchangeCards(d1, d2),
+    "[" <a: PAtom> "]の[" <s: PAtom> "]を行う" => Action::DoSituation(a, s),
+    "[" <a: PAtom> "]が[" <l: ChoiceLabel> "]をしたならば、[" <then: Action> "]" => Action::BranchLastAction(a, l, Box::new(then), None),
+    "[" <a: PAtom> "]が[" <l: ChoiceLabel> "]をしたならば、[" <then: Action> "]、そうでないならば[" <else_: Action> "]" => Action::BranchLastAction(a, l, Box::new(then), Some(Box::new(else_))),
+}
+
+PredicateExpr: PredicateExpr = <OrPExpr>;
+
+OrPExpr: PredicateExpr = {
+    <or_expr: OrPExpr> "||" <e: AndPExpr> => PredicateExpr::Or(Box::new(or_expr), Box::new(e)),
+    <e: AndPExpr> => e
+}
+
+AndPExpr: PredicateExpr = {
+    <and_expr: AndPExpr> "&&" <e: NotPExpr> => PredicateExpr::And(Box::new(and_expr), Box::new(e)),
+    <e: NotPExpr> => e
+}
+
+NotPExpr: PredicateExpr = {
+    "~" <e: NotPExpr> => PredicateExpr::Not(Box::new(e)),
+    <e: PrimaryPExpr> => e
+}
+
+PrimaryPExpr: PredicateExpr = {
+    "(" <e: OrPExpr> ")" => e,
+    <Predicate>
+}
+
+Predicate: PredicateExpr = {
+    "True" => PredicateExpr::True,
+    "False" => PredicateExpr::False,
+    "[" <c: PAtom> "]は[" <d: PAtom> "]に含まれる" => PredicateExpr::In(c, d),
+    "[" <d: PAtom> "]は[" <c: PAtom> "]を含む" => PredicateExpr::In(c, d),
+    "[" <c1: PAtom> "]は[" <c2: PAtom> "]である" => PredicateExpr::Equal(c1, c2),
+    "[" <c: PAtom> "]のスートは[" <s: PAtom> "]である" => PredicateExpr::EqSuit(c, s),
+    "[" <c: PAtom> "]の数字は[" <n: PAtom> "]である" => PredicateExpr::EqNumber(c, n),
+}
+
+PAtom: PredicateAtom = {
+    <x: Num> => PredicateAtom::Number(x as u8),
+    "'S" => PredicateAtom::Suit(Spade),
+    "'H" => PredicateAtom::Suit(Hart),
+    "'C" => PredicateAtom::Suit(Club),
+    "'D" => PredicateAtom::Suit(Diamond),
+    "'JK" => PredicateAtom::Suit(Joker),
+    <x: Card> => PredicateAtom::Card(x),
+    <x: Name> => PredicateAtom::Const(x),
+    <x: Var> => PredicateAtom::Var(x),
+}
+
+Name: String = <r"(_|\w)+"> => <>.to_string();
+Var: String = <r"\?(_|\w)+"> => <>.to_string();
+Num: i64 = <r"'[1-9]+"> => <>[1..].parse().unwrap();
