@@ -11,7 +11,7 @@ Game Navigation Language for Playing Cards (WIP)
 詳細はdocument内の資料を参照
 
 ## System Overview
-![systemoverview](https://github.com/akky2501/OneDeck/tree/master/document/system_overview.png)
+![systemoverview](https://github.com/akky2501/OneDeck/blob/master/document/system_overview.png)
 
 ## TODO
 - [x] Lexer / Parser
